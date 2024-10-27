@@ -1,0 +1,7 @@
+<<<<<<< HEAD
+"agency_id","agency_name","agency_url","agency_timezone","agency_lang"
+"1","SPTRANS","http://www.sptrans.com.br/?versao=271024","America/Sao_Paulo","pt"
+=======
+"agency_id","agency_name","agency_url","agency_timezone","agency_lang"
+"1","SPTRANS","http://www.sptrans.com.br/?versao=271024","America/Sao_Paulo","pt"
+>>>>>>> 5e8d84a7c7cb78dc75a31cdcd17aeb6e58265861
