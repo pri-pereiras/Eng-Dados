@@ -4,3 +4,6 @@ apache-airflow-providers-jdbc
 mysql-connector-python
 boto3
 pandas
+pyspark
+pyspark[sql]
+pyspark[pandas_on_spark]

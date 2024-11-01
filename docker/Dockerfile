@@ -22,4 +22,3 @@ USER airflow
 RUN pip install --upgrade pip
 RUN pip install --upgrade apache-airflow-providers-openlineage>=1.8.0
 #RUN pip install -r requirements.txt
-

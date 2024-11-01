@@ -4,58 +4,50 @@ import pandas as pd
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
 from datetime import datetime
+import pyspark
+
+from airflow.utils.dates import days_ago
+
+from pyspark.sql import SparkSession
+
+import os
+
 
 logger = logging.getLogger("airflow")
 
-def save_to_minio(**kwargs):
-    ti = kwargs['ti']
-    # Recuperar o run_id atual (se precisar garantir que está no mesmo contexto)
-    run_id = kwargs['run_id']
-    
-    # Recuperar dados do XCom com o task_id correto e contexto correto
-    data = ti.xcom_pull(key='data_linhas_onibus', task_ids='fetch_olho_vivo_data', dag_id='DataAPI_BuscaLinhas', run_id=run_id)
-    
-    if data is None:
-        logger.error("Nenhum dado encontrado no XCom.")
-        return
-    
-    # Processar o DataFrame
-    df = pd.DataFrame(data)
-    logger.info("DataFrame carregado com sucesso.")
+minio_endpoint = "http://host.docker.internal:9050"
+minio_access_key = "datalake"
+minio_secret_key = "datalake"
+bucket_name = 'raw'
 
-    local_file = "/tmp/DataAPI_BuscaLinhas.csv"
-    logger.info(f"Salvando o DataFrame no arquivo {local_file}.")
-    df.to_csv(local_file, index=False)
-    
-    minio_endpoint = "http://localhost:9051/"
-    minio_access_key = "datalake"
-    minio_secret_key = "datalake"
-    bucket_name = "raw"
-    object_name = "DataAPI_BuscaLinhas.csv"
-    
-    try:
-        logger.info("Conectando ao MinIO e tentando fazer o upload do arquivo.")
-        s3_client = boto3.client('s3',
+
+spark = SparkSession.builder.getOrCreate()
+
+def open_xlsx():
+    s3_client = boto3.client('s3',
                                  endpoint_url=minio_endpoint,
                                  aws_access_key_id=minio_access_key,
                                  aws_secret_access_key=minio_secret_key)
-        
-        try:
-            s3_client.head_bucket(Bucket=bucket_name)
-        except:
-            logger.warning(f"Bucket {bucket_name} não encontrado, criando bucket.")
-            s3_client.create_bucket(Bucket=bucket_name)
-        
-        s3_client.upload_file(local_file, bucket_name, object_name)
-        logger.info(f"Arquivo {local_file} salvo no bucket {bucket_name} como {object_name}.")
-    except Exception as e:
-        logger.error(f"Erro ao enviar o arquivo para o MinIO: {str(e)}")
+    s3_client.download_file(bucket_name, "shapes.txt", '/tmp/shapes.txt')
+
+    data = spark.read.option("header", True).csv('/tmp/shapes.txt')
+
+    data = spark.sql('SELECT shape_id as sp,shape_pt_lat as sp_pt,shape_pt_sequence sp_sq FROM {data} ', data=data)
+
+    data.write.mode("overwrite").parquet('/tmp/shapes')
+
+    i=0
+    for each in os.listdir('/tmp/shapes'):
+        s3_client.upload_file('/tmp/shapes/'+each, 'trusted', 'shapes/shapes{}.parquet'.format(i))
+        i+=1
+
 
 default_args = {
     'owner': 'airflow',
-    'start_date': datetime(2024, 10, 20),
-    'retries': 1
+    'start_date': days_ago(1),
+    'retries': 0,
 }
+
 
 with DAG('save_DataAPI_BuscaLinhas_to_minio',
          default_args=default_args,
@@ -64,6 +56,6 @@ with DAG('save_DataAPI_BuscaLinhas_to_minio',
     
     save_task = PythonOperator(
         task_id='save_DataAPI_BuscaLinhas_to_minio',
-        python_callable=save_to_minio,
+        python_callable=open_xlsx,
         provide_context=True
     )
