@@ -140,21 +140,21 @@ airflow users create \
 
 ## Configurar o Postgres
 1. Acesse a interface do DBeaver instalado na máquina e crie uma nova conexão com as credenciais abaixo.
-    Conecte usando: `Host`
-    Hosts: `host.docker.internal`
-    Porta: `5432`
-    Banco de Dados: `postgres`
-    Nome de usuário: `airflow`
-    Senha: `airflow`
-    user: admin
-    senha: minioadmin
+- **Conecte usando**: `Host`
+- **Hosts**: `host.docker.internal`
+- **Porta**: `5432`
+- **Banco de Dados**: `postgres`
+- **Nome de usuário**: `airflow`
+- **Senha**: `airflow`
+- **user**: admin
+- **senha**: minioadmin
 
 ## Configurar o Power BI para conexão com o banco de dados Postgres
 1. Acesse a interface do Power BI instalado na máquina e obtenha as bases utilizando as credencias abaixo.
-    Servidor: `localhost:5432`
-    Banco de Dados: `postgres`
-    Nome de usuário: `airflow`
-    Senha: `airflow`
+- **Servidor**: `localhost:5432`
+- **Banco de Dados**: `postgres`
+- **Nome de usuário**: `airflow`
+- **Senha**: `airflow`
 
 
 ## Monitoramento de Logs
