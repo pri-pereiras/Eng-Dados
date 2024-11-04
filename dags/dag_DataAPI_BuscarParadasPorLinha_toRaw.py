@@ -6,6 +6,7 @@ import logging
 from io import StringIO
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
+from airflow.operators.dagrun_operator import TriggerDagRunOperator
 from airflow.utils.dates import days_ago
 
 logger = logging.getLogger("airflow")
@@ -143,38 +144,40 @@ def save_ParadasPorLinha_to_minio(**kwargs):
 default_args = {
     'owner': 'airflow',
     'start_date': days_ago(1),
-    'retries': 1,
+    'retries': 0,
 }
 
 with DAG(
-    'DataAPI_BuscarParadasPorLinha_SaveMinIO',
+    'DataAPI_BuscarParadasPorLinha_toRaw',
     default_args=default_args,
-    description='DAG para buscar todas as paradas de todas as linhas a partir de um CSV no MinIO e salvar no MinIO',
-    schedule_interval='@daily',  # Executar uma vez por mês
+    schedule_interval='@weekly',  # Executar semanalmente
     catchup=False,
 ) as dag:
 
-    # Tarefa para baixar o CSV de linhas do MinIO
     task_baixar_csv_linhas = PythonOperator(
         task_id='baixar_csv_linhas_minio',
         python_callable=baixar_csv_linhas_minio,
         provide_context=True,
     )
 
-    # Tarefa para obter todas as paradas por linha
     task_GetData_API_BuscarParadasPorLinha = PythonOperator(
         task_id='GetData_API_BuscarParadasPorLinha',
         python_callable=GetData_API_BuscarParadasPorLinha,
         provide_context=True,
     )
     
-        # Tarefa para obter todas as paradas por linha
     task_save_ParadasPorLinha_to_minio = PythonOperator(
         task_id='save_ParadasPorLinha_to_minio',
         python_callable=save_ParadasPorLinha_to_minio,
         provide_context=True,
-    )    
+    )
     
+    # Trigger para a próxima DAG
+    trigger_trusted_refined = TriggerDagRunOperator(
+        task_id='trigger_trusted_refined',
+        trigger_dag_id='DataAPI_BuscarParadasPorLinha_toTrusted_toRefined',
+        wait_for_completion=True,
+    )
 
     # Definir a ordem das tarefas
-    task_baixar_csv_linhas >> task_GetData_API_BuscarParadasPorLinha >> task_save_ParadasPorLinha_to_minio
+    task_baixar_csv_linhas >> task_GetData_API_BuscarParadasPorLinha >> task_save_ParadasPorLinha_to_minio >> trigger_trusted_refined

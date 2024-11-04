@@ -1,17 +1,6 @@
 version: '3.8'
 
 services:
-  mysql:
-    image: mysql:8.0
-    environment:
-      MYSQL_ROOT_PASSWORD: airflow
-      MYSQL_DATABASE: airflow
-      MYSQL_USER: airflow
-      MYSQL_PASSWORD: airflow
-    ports:
-      - "3306:3306"
-    networks:
-      - laboratorio-airflow-tier
 
   postgres:
     image: postgres:13
@@ -50,14 +39,14 @@ services:
     restart: always
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2:// :airflow@postgres/airflow
+      AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
       AIRFLOW__CORE__FERNET_KEY: ${FERNET_KEY}
       AIRFLOW__WEBSERVER__SECRET_KEY: '${FERNET_KEY}2'
       AIRFLOW__CORE__LOAD_EXAMPLES: 'True'
     volumes:
       - ../dags:/opt/airflow/dags
       - ../requirements.txt:/requirements.txt
-      - C:/Users/Pedro/Documents/soutag_serv_repo/Novapasta:/opt/airflow/data
+      - C:\Users\pri_p\OneDrive\FIA\Pós - Engenharia de Dados\03 - Engenharia de Dados\Projeto Final\Eng_Dados\airflow\data:/container/data
     ports:
       - "8080:8080"
     depends_on:
@@ -163,36 +152,36 @@ services:
     networks:
       - laboratorio-airflow-tier
 
-  spark-worker-2:
-    image: bde2020/spark-worker:3.3.0-hadoop3.3 # apache-spark:3.3.0 # bitnami/spark:3.3.0
-    hostname: spark-worker-2
-    container_name: spark-worker-2
-    ports:
-      - '28081:8081'
-      - '37077:7077'
-    volumes:
-      - ./spark/jars/postgresql-42.5.1.jar:/spark/jars/postgresql-42.5.1.jar
-      - ./spark/jars/hadoop-aws-3.2.4.jar:/spark/jars/hadoop-aws-3.2.4.jar
-      - ./spark/jars/delta-core_2.12-2.1.0.jar:/spark/jars/delta-core_2.12-2.1.0.jar
-      - ./spark/jars/delta-storage-2.1.0.jar:/spark/jars/delta-storage-2.1.0.jar
-      - ./spark/jars/s3-2.18.41.jar:/spark/jars/s3-2.18.41.jar
-      - ./spark/jars/guava-30.0-jre.jar:/spark/jars/guava-30.0-jre.jar
-      - ./spark/jars/aws-java-sdk-bundle-1.11.901.jar:/spark/jars/aws-java-sdk-bundle-1.11.901.jar
-      - ./spark/jars/aws-java-sdk-core-1.11.901.jar:/spark/jars/aws-java-sdk-core-1.11.901.jar
-      - ./spark/jars/aws-java-sdk-kms-1.11.901.jar:/spark/jars/aws-java-sdk-kms-1.11.901.jar
-      - ./spark/jars/aws-java-sdk-s3-1.11.901.jar:/spark/jars/aws-java-sdk-s3-1.11.901.jar
-      - ./spark/jars/aws-java-sdk-dynamodb-1.11.901.jar:/spark/jars/aws-java-sdk-dynamodb-1.11.901.jar
-      - ./spark/scripts:/spark/scripts
-      - ./spark/conf/spark-defaults.conf:/spark/conf/spark-defaults.conf
-    depends_on:
-      - spark-master
-      - minio
-    environment:
-      SPARK_MASTER: spark://spark-master:7077
-      SPARK_WORKER_MEMORY: 1G
-      SPARK_WORKER_CORES: 1
-    networks:
-      - laboratorio-airflow-tier
+  # spark-worker-2:
+  #   image: bde2020/spark-worker:3.3.0-hadoop3.3 # apache-spark:3.3.0 # bitnami/spark:3.3.0
+  #   hostname: spark-worker-2
+  #   container_name: spark-worker-2
+  #   ports:
+  #     - '28081:8081'
+  #     - '37077:7077'
+  #   volumes:
+  #     - ./spark/jars/postgresql-42.5.1.jar:/spark/jars/postgresql-42.5.1.jar
+  #     - ./spark/jars/hadoop-aws-3.2.4.jar:/spark/jars/hadoop-aws-3.2.4.jar
+  #     - ./spark/jars/delta-core_2.12-2.1.0.jar:/spark/jars/delta-core_2.12-2.1.0.jar
+  #     - ./spark/jars/delta-storage-2.1.0.jar:/spark/jars/delta-storage-2.1.0.jar
+  #     - ./spark/jars/s3-2.18.41.jar:/spark/jars/s3-2.18.41.jar
+  #     - ./spark/jars/guava-30.0-jre.jar:/spark/jars/guava-30.0-jre.jar
+  #     - ./spark/jars/aws-java-sdk-bundle-1.11.901.jar:/spark/jars/aws-java-sdk-bundle-1.11.901.jar
+  #     - ./spark/jars/aws-java-sdk-core-1.11.901.jar:/spark/jars/aws-java-sdk-core-1.11.901.jar
+  #     - ./spark/jars/aws-java-sdk-kms-1.11.901.jar:/spark/jars/aws-java-sdk-kms-1.11.901.jar
+  #     - ./spark/jars/aws-java-sdk-s3-1.11.901.jar:/spark/jars/aws-java-sdk-s3-1.11.901.jar
+  #     - ./spark/jars/aws-java-sdk-dynamodb-1.11.901.jar:/spark/jars/aws-java-sdk-dynamodb-1.11.901.jar
+  #     - ./spark/scripts:/spark/scripts
+  #     - ./spark/conf/spark-defaults.conf:/spark/conf/spark-defaults.conf
+  #   depends_on:
+  #     - spark-master
+  #     - minio
+  #   environment:
+  #     SPARK_MASTER: spark://spark-master:7077
+  #     SPARK_WORKER_MEMORY: 800M
+  #     SPARK_WORKER_CORES: 1
+  #   networks:
+  #     - laboratorio-airflow-tier
 
 networks:
   laboratorio-airflow-tier:

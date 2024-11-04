@@ -6,6 +6,7 @@ import pytz
 from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
+from airflow.operators.dagrun_operator import TriggerDagRunOperator
 from airflow.utils.dates import days_ago
 
 # Configurações do MinIO
@@ -57,15 +58,23 @@ def GetData_API_BuscarPosicao(**kwargs):
 default_args = {
     'owner': 'airflow',
     'start_date': days_ago(1),
-    'retries': 1,
+    'retries': 0,
 }
 
-with DAG('DataAPI_BuscarPosicao_SaveMinIO', default_args=default_args, schedule_interval='*/5 * * * *', catchup=False) as dag:
-    # Tarefa de coleta de dados para a camada raw
+with DAG('DataAPI_BuscarPosicao_toRaw', default_args=default_args, 
+         schedule_interval='*/15 * * * *',  # Executa a cada 15 minutos
+         catchup=False) as dag:
+    
     fetch_task = PythonOperator(
         task_id='GetData_API_BuscarPosicao',
         python_callable=GetData_API_BuscarPosicao
     )
-    
 
-    fetch_task 
+    # Trigger para a próxima DAG
+    trigger_trusted = TriggerDagRunOperator(
+        task_id='trigger_trusted',
+        trigger_dag_id='DataAPI_BuscarPosicao_toTrusted',
+        wait_for_completion=True,
+    )
+
+    fetch_task >> trigger_trusted

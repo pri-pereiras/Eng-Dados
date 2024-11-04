@@ -3,9 +3,9 @@ import pandas as pd
 import boto3
 import logging
 import os
-import json
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
+from airflow.operators.dagrun_operator import TriggerDagRunOperator
 from datetime import datetime
 
 logger = logging.getLogger("airflow")
@@ -13,8 +13,8 @@ logger = logging.getLogger("airflow")
 # Defina sua chave de API da SPTrans
 api_key = "9aa2fcbfb81e92aaf26c640c539848fa69193acd16d9784ec862d1d42b29d28c"
 
-# Função para autenticação e busca das Empresas de ônibus
-def GetData_API_BuscarEmpresas(**kwargs):
+# Função para autenticação e busca das linhas de ônibus
+def GetData_API_BuscaLinhas(**kwargs):
     auth_url = "http://api.olhovivo.sptrans.com.br/v2.1/Login/Autenticar"
     params = {"token": api_key}
     
@@ -26,37 +26,37 @@ def GetData_API_BuscarEmpresas(**kwargs):
         print("Falha na autenticação:", auth_response.text)
         return
     
-     # Busca as empresas
-    search_url = "http://api.olhovivo.sptrans.com.br/v2.1/Empresa"
-    response = requests.get(search_url,  cookies=auth_response.cookies)
-
-    if response.status_code == 200:
-        try:
-            todas_as_empresas = response.json()
-            print("Empresas encontradas com sucesso!")
-        except ValueError:
-            print("Erro ao converter a resposta para JSON")
-            return
-    else:
-        print("Erro ao buscar Empresas")
-        return
+    search_url = "http://api.olhovivo.sptrans.com.br/v2.1/Linha/Buscar"
+    prefixos = [str(i) for i in range(10)]
+    todas_as_linhas = []
     
-    # Armazenar o JSON bruto no XCom para a próxima tarefa
-    kwargs['ti'].xcom_push(key='data_empresas_onibus', value=json.dumps(todas_as_empresas))
-    print("Dados JSON brutos armazenados no XCom com sucesso!")
+    for prefixo in prefixos:
+        response = requests.get(search_url, params={"termosBusca": prefixo}, cookies=auth_response.cookies)
+        if response.status_code == 200:
+            linhas = response.json()
+            todas_as_linhas.extend(linhas)
+            print(f"Linhas encontradas com prefixo {prefixo}: {len(linhas)}")
+        else:
+            print(f"Erro ao buscar linhas com prefixo {prefixo}: {response.text}")
+    
+    todas_as_linhas = [dict(t) for t in {tuple(d.items()) for d in todas_as_linhas}]
+    df = pd.DataFrame(todas_as_linhas)
+    
+    # Armazenar o DataFrame no XCom
+    kwargs['ti'].xcom_push(key='data_linhas_onibus', value=df.to_dict())
+    print("Dados armazenados no XCom com sucesso!")
 
 # Função para salvar os dados no MinIO
-def save_Empresas_to_minio(**kwargs):
+def save_linhas_to_minio(**kwargs):
     ti = kwargs['ti']
-    data_json = ti.xcom_pull(key='data_empresas_onibus', task_ids='GetData_API_BuscarEmpresas')
+    data = ti.xcom_pull(key='data_linhas_onibus', task_ids='GetData_API_BuscaLinhas')
     
-    if data_json is None:
+    if data is None:
         logger.error("Nenhum dado encontrado no XCom.")
         return
     
-    # Converter o JSON para DataFrame
-    df = pd.read_json(data_json)
-    local_file = "/tmp/DataAPI_BuscarEmpresas.csv"
+    df = pd.DataFrame(data)
+    local_file = "/tmp/DataAPI_BuscaLinhas.csv"
     logger.info(f"Salvando o DataFrame no arquivo {local_file}.")
     df.to_csv(local_file, index=False)
     
@@ -69,7 +69,7 @@ def save_Empresas_to_minio(**kwargs):
     minio_access_key = "datalake"
     minio_secret_key = "datalake"
     bucket_name = "raw"
-    object_name = "DataAPI_BuscarEmpresas.csv"
+    object_name = "DataAPI_BuscaLinhas.csv"
     
     
     # Conectar e salvar no MinIO
@@ -96,29 +96,34 @@ def save_Empresas_to_minio(**kwargs):
 # Definir o DAG
 default_args = {
     'owner': 'airflow',
-    'start_date': datetime(2024, 10, 20),
+    'start_date': datetime(2024, 11, 3),
     'retries': 0
 }
 
 # Definir a DAG única
-with DAG('DataAPI_BuscarEmpresas_SaveMinIO',
+with DAG('DataAPI_BuscaLinhas_toRaw',
          default_args=default_args,
-         schedule_interval="@daily",
+         schedule_interval='@weekly',  # Executa semanalmente
          catchup=False) as dag:
     
-    # Task 1: Buscar dados da API
     fetch_task = PythonOperator(
-        task_id='GetData_API_BuscarEmpresas',
-        python_callable=GetData_API_BuscarEmpresas,
+        task_id='GetData_API_BuscaLinhas',
+        python_callable=GetData_API_BuscaLinhas,
         provide_context=True
     )
     
-    # Task 2: Salvar os dados no MinIO
     save_task = PythonOperator(
-        task_id='save_Empresas_to_minio',
-        python_callable=save_Empresas_to_minio,
+        task_id='save_linhas_to_minio',
+        python_callable=save_linhas_to_minio,
         provide_context=True
     )
 
-    # Definir dependência: fetch_task -> save_task
-    fetch_task >> save_task
+    # Trigger para a próxima DAG
+    trigger_trusted_refined = TriggerDagRunOperator(
+        task_id='trigger_trusted_refined',
+        trigger_dag_id='DataAPI_BuscaLinhas_toTrusted_toRefined',
+        wait_for_completion=True,
+    )
+
+    # Definindo a sequência de execução
+    fetch_task >> save_task >> trigger_trusted_refined

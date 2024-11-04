@@ -6,7 +6,9 @@ import pytz
 from datetime import datetime
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
+from airflow.operators.dagrun_operator import TriggerDagRunOperator
 from airflow.utils.dates import days_ago
+import time
 
 # Configurações do MinIO
 minio_endpoint = "http://host.docker.internal:9050"
@@ -37,9 +39,9 @@ def autenticar(api_key):
     else:
         raise Exception("Falha na autenticação")
 
-# Função principal para obter previsões de chegada para cada linha
+# Função principal para obter previsões de chegada para cada linha com re-autenticação em caso de falha
 def GetData_API_PrevisaoLinha(**kwargs):
-    # Autenticação
+    # Tenta autenticar inicialmente
     cookies = autenticar(api_key)
     
     # Carregar a relação de linhas a partir do CSV baixado
@@ -52,28 +54,43 @@ def GetData_API_PrevisaoLinha(**kwargs):
     # Iterar sobre cada linha e buscar previsões
     for _, linha in df_linhas.iterrows():
         codigo_linha = linha["cl"]
-        
-        # Chamar a API para previsão de chegada de cada linha
-        url = f"http://api.olhovivo.sptrans.com.br/v2.1/Previsao/Linha?codigoLinha={codigo_linha}"
-        response = requests.get(url, cookies=cookies)
-        
-        if response.status_code == 200:
-            data = response.json()
-            
-            # Verificar se há dados válidos e adicionar código da linha
-            if data.get("ps"):
-                for parada in data["ps"]:
-                    parada["codigo_linha"] = codigo_linha
-                consolidated_data.append({
-                    "codigo_linha": codigo_linha,  # Inclui o código da linha para a entrada de dados
-                    "previsoes": data["ps"]
-                })
-                print(f"Dados válidos adicionados para a linha {codigo_linha}")
-            else:
-                print(f"Nenhum dado válido para a linha {codigo_linha}")
-        else:
-            print(f"Erro ao buscar previsões para a linha {codigo_linha}: {response.text}")
-    
+        success = False
+        attempts = 0
+
+        # Tenta fazer a requisição até 3 vezes (re-autenticando se necessário)
+        while not success and attempts < 3:
+            try:
+                # Chamar a API para previsão de chegada de cada linha
+                url = f"http://api.olhovivo.sptrans.com.br/v2.1/Previsao/Linha?codigoLinha={codigo_linha}"
+                response = requests.get(url, cookies=cookies)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    
+                    # Verificar se há dados válidos e adicionar código da linha
+                    if data.get("ps"):
+                        for parada in data["ps"]:
+                            parada["codigo_linha"] = codigo_linha
+                        consolidated_data.append({
+                            "codigo_linha": codigo_linha,
+                            "previsoes": data["ps"]
+                        })
+                        print(f"Dados válidos adicionados para a linha {codigo_linha}")
+                    else:
+                        print(f"Nenhum dado válido para a linha {codigo_linha}")
+                    success = True  # Sai do loop se a chamada foi bem-sucedida
+                else:
+                    print(f"Erro ao buscar previsões para a linha {codigo_linha}: {response.text}")
+                    attempts += 1
+                    if attempts < 3:
+                        cookies = autenticar(api_key)  # Re-autentica antes da próxima tentativa
+            except requests.ConnectionError as e:
+                print(f"Erro de conexão ao buscar dados para a linha {codigo_linha}: {e}")
+                attempts += 1
+                if attempts < 3:
+                    cookies = autenticar(api_key)  # Re-autentica antes da próxima tentativa
+                time.sleep(5)  # Aguarda 5 segundos antes da nova tentativa
+
     # Salvar dados consolidados no MinIO
     if consolidated_data:
         timezone = pytz.timezone("America/Sao_Paulo")
@@ -99,27 +116,27 @@ default_args = {
     'retries': 0,
 }
 
-with DAG(
-    'DataAPI_BuscarPrevisaoLinha_SaveMinIO',
-    default_args=default_args,
-    description='DAG para buscar previsões de chegada de veículos para cada linha e salvar no MinIO',
-    schedule_interval='*/5 * * * *',
-    catchup=False,
-) as dag:
-
-    # Tarefa para baixar o CSV de linhas do MinIO
+with DAG('DataAPI_BuscarPrevisaoLinha_toRaw', default_args=default_args, 
+         schedule_interval='*/15 * * * *',  # Executa a cada 15 minutos
+         catchup=False) as dag:
+    
     task_baixar_csv_linhas = PythonOperator(
         task_id='baixar_csv_linhas_minio',
         python_callable=baixar_csv_linhas_minio,
         provide_context=True,
     )
 
-    # Tarefa para obter previsões de chegada de cada linha
     task_GetData_API_PrevisaoLinha = PythonOperator(
         task_id='GetData_API_PrevisaoLinha',
         python_callable=GetData_API_PrevisaoLinha,
         provide_context=True,
     )
-    
-    # Definir a ordem das tarefas
-    task_baixar_csv_linhas >> task_GetData_API_PrevisaoLinha
+
+    # Trigger para a próxima DAG
+    trigger_trusted = TriggerDagRunOperator(
+        task_id='trigger_trusted',
+        trigger_dag_id='DataAPI_BuscarPrevisaoLinha_toTrusted',
+        wait_for_completion=True,
+    )
+
+    task_baixar_csv_linhas >> task_GetData_API_PrevisaoLinha >> trigger_trusted

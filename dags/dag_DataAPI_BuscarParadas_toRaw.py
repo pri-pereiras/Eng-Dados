@@ -5,7 +5,7 @@ import logging
 import os
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
-#from airflow.hooks.base import BaseHook
+from airflow.operators.dagrun_operator import TriggerDagRunOperator
 from datetime import datetime
 
 logger = logging.getLogger("airflow")
@@ -14,7 +14,7 @@ logger = logging.getLogger("airflow")
 api_key = "9aa2fcbfb81e92aaf26c640c539848fa69193acd16d9784ec862d1d42b29d28c"
 
 # Função para autenticação e busca das linhas de ônibus
-def GetData_API_BuscaLinhas(**kwargs):
+def GetData_API_BuscarParadas(**kwargs):
     auth_url = "http://api.olhovivo.sptrans.com.br/v2.1/Login/Autenticar"
     params = {"token": api_key}
     
@@ -25,38 +25,39 @@ def GetData_API_BuscaLinhas(**kwargs):
     else:
         print("Falha na autenticação:", auth_response.text)
         return
-    
-    search_url = "http://api.olhovivo.sptrans.com.br/v2.1/Linha/Buscar"
-    prefixos = [str(i) for i in range(10)]
-    todas_as_linhas = []
-    
-    for prefixo in prefixos:
-        response = requests.get(search_url, params={"termosBusca": prefixo}, cookies=auth_response.cookies)
+  
+    base_url = "http://api.olhovivo.sptrans.com.br/v2.1"
+    letras = "abcdefghijklmnopqrstuvwxyz"  # Prefixos para busca
+    todas_as_paradas = []  # Armazena todas as paradas
+  
+    for letra in letras:
+        search_url = f"{base_url}/Parada/Buscar?termosBusca={letra}"
+        response = requests.get(search_url, cookies=auth_response.cookies)
         if response.status_code == 200:
-            linhas = response.json()
-            todas_as_linhas.extend(linhas)
-            print(f"Linhas encontradas com prefixo {prefixo}: {len(linhas)}")
+            paradas = response.json()
+            todas_as_paradas.extend(paradas)
+            print(f"Paradas encontradas com a letra {letra}: {len(paradas)}")
         else:
-            print(f"Erro ao buscar linhas com prefixo {prefixo}: {response.text}")
-    
-    todas_as_linhas = [dict(t) for t in {tuple(d.items()) for d in todas_as_linhas}]
-    df = pd.DataFrame(todas_as_linhas)
-    
+            print(f"Erro ao buscar paradas com a letra {letra}: {response.text}")
+
+    todas_as_paradas  = [dict(t) for t in {tuple(d.items()) for d in todas_as_paradas}]
+    df = pd.DataFrame(todas_as_paradas)
+      
     # Armazenar o DataFrame no XCom
-    kwargs['ti'].xcom_push(key='data_linhas_onibus', value=df.to_dict())
+    kwargs['ti'].xcom_push(key='data_paradas', value=df.to_dict())
     print("Dados armazenados no XCom com sucesso!")
 
 # Função para salvar os dados no MinIO
-def save_linhas_to_minio(**kwargs):
+def save_paradas_to_minio(**kwargs):
     ti = kwargs['ti']
-    data = ti.xcom_pull(key='data_linhas_onibus', task_ids='GetData_API_BuscaLinhas')
+    data = ti.xcom_pull(key='data_paradas', task_ids='GetData_API_BuscarParadas')
     
     if data is None:
         logger.error("Nenhum dado encontrado no XCom.")
         return
     
     df = pd.DataFrame(data)
-    local_file = "/tmp/DataAPI_BuscaLinhas.csv"
+    local_file = "/tmp/DataAPI_BuscarParadas.csv"
     logger.info(f"Salvando o DataFrame no arquivo {local_file}.")
     df.to_csv(local_file, index=False)
     
@@ -69,7 +70,7 @@ def save_linhas_to_minio(**kwargs):
     minio_access_key = "datalake"
     minio_secret_key = "datalake"
     bucket_name = "raw"
-    object_name = "DataAPI_BuscaLinhas.csv"
+    object_name = "Data_API_BuscarParadas.csv"
     
     
     # Conectar e salvar no MinIO
@@ -96,29 +97,34 @@ def save_linhas_to_minio(**kwargs):
 # Definir o DAG
 default_args = {
     'owner': 'airflow',
-    'start_date': datetime(2024, 10, 20),
-    'retries': 1
+    'start_date': datetime(2024, 11, 3),
+    'retries': 0
 }
 
 # Definir a DAG única
-with DAG('DataAPI_BuscaLinhas_SaveMinIO',
+with DAG('DataAPI_BuscarParadas_toRaw',
          default_args=default_args,
-         schedule_interval="@daily",
+         schedule_interval='@weekly',  # Executa semanalmente
          catchup=False) as dag:
     
-    # Task 1: Buscar dados da API
     fetch_task = PythonOperator(
-        task_id='GetData_API_BuscaLinhas',
-        python_callable=GetData_API_BuscaLinhas,
+        task_id='GetData_API_BuscarParadas',
+        python_callable=GetData_API_BuscarParadas,
         provide_context=True
     )
     
-    # Task 2: Salvar os dados no MinIO
     save_task = PythonOperator(
-        task_id='save_linhas_to_minio',
-        python_callable=save_linhas_to_minio,
+        task_id='save_paradas_to_minio',
+        python_callable=save_paradas_to_minio,
         provide_context=True
     )
 
-    # Definir dependência: fetch_task -> save_task
-    fetch_task >> save_task
+    # Trigger para a próxima DAG
+    trigger_trusted_refined = TriggerDagRunOperator(
+        task_id='trigger_trusted_refined',
+        trigger_dag_id='DataAPI_BuscarParadas_toTrusted_toRefined',
+        wait_for_completion=True,
+    )
+
+    # Definindo a sequência de execução
+    fetch_task >> save_task >> trigger_trusted_refined
