@@ -62,7 +62,7 @@ default_args = {
 }
 
 with DAG('DataAPI_BuscarPosicao_toRaw', default_args=default_args, 
-         schedule_interval='*/15 * * * *',  # Executa a cada 15 minutos
+         schedule_interval='*/2 * * * *',  # Executa a cada 15 minutos
          catchup=False) as dag:
     
     fetch_task = PythonOperator(

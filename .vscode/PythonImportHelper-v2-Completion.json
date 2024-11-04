@@ -2140,7 +2140,7 @@
         "kind": 5,
         "importPath": "dags.dag_DataAPI_BuscarPosicao_toRaw",
         "description": "dags.dag_DataAPI_BuscarPosicao_toRaw",
-        "peekOfCode": "default_args = {\n    'owner': 'airflow',\n    'start_date': days_ago(1),\n    'retries': 0,\n}\nwith DAG('DataAPI_BuscarPosicao_toRaw', default_args=default_args, \n         schedule_interval='*/15 * * * *',  # Executa a cada 15 minutos\n         catchup=False) as dag:\n    fetch_task = PythonOperator(\n        task_id='GetData_API_BuscarPosicao',",
+        "peekOfCode": "default_args = {\n    'owner': 'airflow',\n    'start_date': days_ago(1),\n    'retries': 0,\n}\nwith DAG('DataAPI_BuscarPosicao_toRaw', default_args=default_args, \n         schedule_interval='*/2 * * * *',  # Executa a cada 15 minutos\n         catchup=False) as dag:\n    fetch_task = PythonOperator(\n        task_id='GetData_API_BuscarPosicao',",
         "detail": "dags.dag_DataAPI_BuscarPosicao_toRaw",
         "documentation": {}
     },
@@ -2473,7 +2473,7 @@
         "kind": 5,
         "importPath": "dags.dag_DataAPI_BuscarPrevisaoLinha_toRaw",
         "description": "dags.dag_DataAPI_BuscarPrevisaoLinha_toRaw",
-        "peekOfCode": "default_args = {\n    'owner': 'airflow',\n    'start_date': days_ago(1),\n    'retries': 0,\n}\nwith DAG('DataAPI_BuscarPrevisaoLinha_toRaw', default_args=default_args, \n         schedule_interval='*/15 * * * *',  # Executa a cada 15 minutos\n         catchup=False) as dag:\n    task_baixar_csv_linhas = PythonOperator(\n        task_id='baixar_csv_linhas_minio',",
+        "peekOfCode": "default_args = {\n    'owner': 'airflow',\n    'start_date': days_ago(1),\n    'retries': 0,\n}\nwith DAG('DataAPI_BuscarPrevisaoLinha_toRaw', default_args=default_args, \n         schedule_interval='*/2 * * * *',  # Executa a cada 15 minutos\n         catchup=False) as dag:\n    task_baixar_csv_linhas = PythonOperator(\n        task_id='baixar_csv_linhas_minio',",
         "detail": "dags.dag_DataAPI_BuscarPrevisaoLinha_toRaw",
         "documentation": {}
     },

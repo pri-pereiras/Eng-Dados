@@ -117,7 +117,7 @@ default_args = {
 }
 
 with DAG('DataAPI_BuscarPrevisaoLinha_toRaw', default_args=default_args, 
-         schedule_interval='*/15 * * * *',  # Executa a cada 15 minutos
+         schedule_interval='*/2 * * * *',  # Executa a cada 15 minutos
          catchup=False) as dag:
     
     task_baixar_csv_linhas = PythonOperator(
