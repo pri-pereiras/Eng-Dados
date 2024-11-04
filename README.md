@@ -2,6 +2,10 @@
 
 Este projeto configura um pipeline completo de engenharia de dados, utilizando o Apache Airflow para orquestração de tarefas, Spark para processamento distribuído de dados, Pandas para manipulação e análise de dados, Postgres como banco de dados relacional, e Power BI para visualização de dados. Todos os componentes estão integrados utilizando Docker e Docker Compose para facilitar o setup e a execução.
 
+## Desenho de arquiterura
+
+![Diagrama de Arquitetura](Arquitetura/Arquitetura.png)
+
 ## Requisitos Mínimos
 
 - Docker (versão 20.10 ou superior)
